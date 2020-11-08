@@ -1,0 +1,4 @@
+.env.local
+
+mysql/data/*
+!mysql/data/.gitkeep

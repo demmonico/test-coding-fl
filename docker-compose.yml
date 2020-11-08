@@ -1,0 +1,89 @@
+version: '3'
+
+services:
+  app_nginx_fe:
+    build: ./infra/common/nginx-fe
+    volumes:
+      - ./infra/common/nginx-fe/conf/nginx.conf:/etc/nginx/nginx.conf:delegated
+      - ./infra/common/nginx-fe/conf/conf.d:/etc/nginx/conf.d:delegated
+      - ./infra/local/nginx/certs/cert.pem:/etc/ssl/certs/localhost.crt:delegated
+      - ./infra/local/nginx/certs/key.pem:/etc/ssl/private/localhost.key:delegated
+    ports:
+      - "8080:80"
+      - "8443:443"
+    networks:
+      - default
+      - frontend
+    depends_on:
+      - app_fe
+
+  app_fe:
+    build:
+      context: .
+      dockerfile: fe.Dockerfile
+    working_dir: /app
+    environment:
+      BE_HOST: http://app_nginx_be
+    volumes:
+      - ./code-fe:/app:delegated
+    networks:
+      - frontend
+    deploy:
+      mode: replicated
+      replicas: 2
+    depends_on:
+      - app_nginx_be
+
+  app_nginx_be:
+    build: ./infra/common/nginx-be
+    volumes:
+      - ./infra/common/nginx-be/conf/nginx.conf:/etc/nginx/nginx.conf:delegated
+      - ./infra/common/nginx-be/conf/conf.d:/etc/nginx/conf.d:delegated
+    ports:
+      - "8081:80"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - app_be
+
+  app_be:
+    build:
+      context: .
+      dockerfile: be.Dockerfile
+    working_dir: /app
+    environment:
+      DB_HOST: app_db
+      DB_USER: mysqluser
+      DB_PASSWORD: 12345678
+    volumes:
+      - ./code-be:/app:delegated
+    networks:
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 2
+    depends_on:
+      - app_db
+
+  app_db:
+    image: mysql:latest
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootuser
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: mysqluser
+      MYSQL_PASSWORD: 12345678
+    volumes:
+      - ./infra/local/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:delegated
+      - ./infra/local/mysql/data:/var/lib/mysql:delegated
+    ports:
+      - "33306:3306"
+    networks:
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
